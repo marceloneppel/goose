@@ -15,6 +15,10 @@ type SidecarContextValue = {
     resource: ResourceContent;
     appendPromptToChat?: (value: string) => void;
   }) => void;
+  toggleMCPUI: (payload: {
+    resource: ResourceContent;
+    appendPromptToChat?: (value: string) => void;
+  }) => void;
   close: () => void;
 };
 
@@ -82,9 +86,22 @@ export function SidecarProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const toggleMCPUI = useCallback(
+    (payload: { resource: ResourceContent; appendPromptToChat?: (value: string) => void }) => {
+      const currentUri = content.kind === 'mcp-ui' ? content.resource.resource.uri : undefined;
+      const nextUri = payload.resource.resource.uri;
+      if (isOpen && currentUri && nextUri && currentUri === nextUri) {
+        close();
+        return;
+      }
+      openWithMCPUI(payload);
+    },
+    [content, isOpen, close, openWithMCPUI]
+  );
+
   const value = useMemo<SidecarContextValue>(
-    () => ({ isOpen, content, widthPct, setWidthPct, open, openWithMCPUI, close }),
-    [isOpen, content, widthPct, setWidthPct, open, openWithMCPUI, close]
+    () => ({ isOpen, content, widthPct, setWidthPct, open, openWithMCPUI, toggleMCPUI, close }),
+    [isOpen, content, widthPct, setWidthPct, open, openWithMCPUI, toggleMCPUI, close]
   );
 
   return <SidecarContext.Provider value={value}>{children}</SidecarContext.Provider>;

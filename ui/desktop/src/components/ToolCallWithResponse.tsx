@@ -11,7 +11,7 @@ import {
 import { cn, snakeToTitleCase } from '../utils';
 import Dot, { LoadingStatus } from './ui/Dot';
 import { NotificationEvent } from '../hooks/useMessageStream';
-import { ChevronRight, LoaderCircle } from 'lucide-react';
+import { ChevronRight, LoaderCircle, SquareArrowOutUpRight } from 'lucide-react';
 import { TooltipWrapper } from './settings/providers/subcomponents/buttons/TooltipWrapper';
 // Inline MCP-UI renderer is unused now (sidecar only)
 import { isUIResource } from '@mcp-ui/client';
@@ -44,22 +44,47 @@ export default function ToolCallWithResponse({
   return (
     <>
       {shouldRender && (
-        <div
-          className={cn(
-            'w-full text-sm font-sans rounded-lg overflow-hidden border-borderSubtle border bg-background-muted'
-          )}
-        >
-          <ToolCallView
-            {...{
-              isCancelledMessage,
-              toolCall: toolCall!,
-              toolResponse,
-              notifications,
-              isStreamingMessage,
-              openInSidecar: (resource: ResourceContent) =>
-                sidecar.openWithMCPUI({ resource, appendPromptToChat: append }),
-            }}
-          />
+        <div className="relative">
+          <div
+            className={cn(
+              'w-full text-sm font-sans rounded-lg overflow-hidden border-borderSubtle border bg-background-default p-3'
+            )}
+          >
+            <ToolCallView
+              {...{
+                isCancelledMessage,
+                toolCall: toolCall!,
+                toolResponse,
+                notifications,
+                isStreamingMessage,
+                openInSidecar: (resource: ResourceContent) =>
+                  sidecar.toggleMCPUI({ resource, appendPromptToChat: append }),
+              }}
+            />
+          </div>
+          {(() => {
+            const ui = (toolResponse?.toolResult?.value || []).find((c) => isUIResource(c));
+            return ui && isUIResource(ui) ? (
+              <button
+                className="absolute z-10 rounded bg-background-default/95 border border-borderSubtle shadow hover:bg-bgSubtle"
+                title={sidecar.isOpen ? 'Close side panel' : 'Open in side panel'}
+                aria-label={sidecar.isOpen ? 'Close side panel' : 'Open in side panel'}
+                onClick={() =>
+                  sidecar.toggleMCPUI({
+                    resource: ui as ResourceContent,
+                    appendPromptToChat: append,
+                  })
+                }
+                style={{
+                  right: 'calc(var(--spacing) * -21)',
+                  top: 'calc(var(--spacing) * 1)',
+                  padding: '6px',
+                }}
+              >
+                <SquareArrowOutUpRight size={14} />
+              </button>
+            ) : null;
+          })()}
         </div>
       )}
     </>
@@ -117,7 +142,6 @@ interface ToolCallViewProps {
   toolResponse?: ToolResponseMessageContent;
   notifications?: NotificationEvent[];
   isStreamingMessage?: boolean;
-  openInSidecar: (resource: ResourceContent) => void;
 }
 
 interface Progress {
@@ -164,7 +188,6 @@ function ToolCallView({
   toolResponse,
   notifications,
   isStreamingMessage = false,
-  openInSidecar,
 }: ToolCallViewProps) {
   const [responseStyle, setResponseStyle] = useState(() => localStorage.getItem('response_style'));
 
@@ -500,15 +523,7 @@ function ToolCallView({
           {toolResults.map(({ result, isExpandToolResults }, index) => {
             return (
               <div key={index} className={cn('border-t border-borderSubtle')}>
-                <ToolResultView
-                  result={result}
-                  isStartExpanded={isExpandToolResults}
-                  onOpenInSidecar={
-                    result.type === 'resource' && isUIResource(result)
-                      ? () => openInSidecar(result as ResourceContent)
-                      : undefined
-                  }
-                />
+                <ToolResultView result={result} isStartExpanded={isExpandToolResults} />
               </div>
             );
           })}
@@ -544,27 +559,15 @@ function ToolDetailsView({ toolCall, isStartExpanded }: ToolDetailsViewProps) {
 interface ToolResultViewProps {
   result: Content;
   isStartExpanded: boolean;
-  onOpenInSidecar?: () => void;
 }
 
-function ToolResultView({ result, isStartExpanded, onOpenInSidecar }: ToolResultViewProps) {
+function ToolResultView({ result, isStartExpanded }: ToolResultViewProps) {
   return (
     <ToolCallExpandable
       label={<span className="pl-4 py-1 font-sans text-sm">Output</span>}
       isStartExpanded={isStartExpanded}
     >
       <div className="pl-4 pr-4 py-4">
-        {onOpenInSidecar && (
-          <div className="flex justify-end mb-2">
-            <button
-              className="text-xs font-sans px-2 py-1 rounded border border-borderSubtle hover:bg-bgSubtle"
-              onClick={onOpenInSidecar}
-              title="Open in side panel"
-            >
-              Open in sidecar
-            </button>
-          </div>
-        )}
         {result.type === 'text' && result.text && (
           <MarkdownContent
             content={result.text}

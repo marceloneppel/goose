@@ -16,7 +16,7 @@ export default function SidecarPanel() {
 
   return (
     <div
-      className={`transition-all duration-200 ease-in-out bg-background-default border-l border-borderSubtle h-full ${
+      className={`transition-[width,opacity] duration-200 ease-in-out bg-background-default border-l border-borderSubtle h-full ${
         isOpen ? 'opacity-100' : 'opacity-0'
       } overflow-hidden flex-shrink-0`}
       style={style as React.CSSProperties}
