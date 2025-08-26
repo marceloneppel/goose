@@ -24,7 +24,7 @@ import { View, ViewOptions } from '../utils/navigationUtils';
 export default function Hub({
   setView,
   setIsGoosehintsModalOpen,
-  resetChat,
+  resetChat: _resetChat,
 }: {
   setView: (view: View, viewOptions?: ViewOptions) => void;
   setIsGoosehintsModalOpen: (isOpen: boolean) => void;
@@ -36,9 +36,6 @@ export default function Hub({
     const combinedTextFromInput = customEvent.detail?.value || '';
 
     if (combinedTextFromInput.trim()) {
-      // Navigate to pair page with the message to be submitted
-      // Pair will handle creating the new chat session
-      resetChat();
       setView('pair', {
         disableAnimation: true,
         initialMessage: combinedTextFromInput,
