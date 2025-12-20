@@ -70,6 +70,7 @@ where
 pub mod call_tool_result {
     use super::*;
     use rmcp::model::{CallToolResult, Content};
+    use serde_json::Value;
 
     pub fn serialize<S>(
         value: &ToolResult<CallToolResult>,
@@ -85,12 +86,26 @@ pub mod call_tool_result {
     where
         D: Deserializer<'de>,
     {
+        // Helper struct for deserializing CallToolResult with empty content
+        // rmcp's CallToolResult requires non-empty content OR structured_content,
+        // but sessions may have been serialized with empty content arrays.
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct RawCallToolResult {
+            #[serde(default)]
+            content: Vec<Content>,
+            #[serde(default)]
+            is_error: Option<bool>,
+            #[serde(default)]
+            structured_content: Option<Value>,
+        }
+
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum ResultFormat {
             NewSuccess {
                 status: String,
-                value: CallToolResult,
+                value: RawCallToolResult,
             },
             LegacySuccess {
                 status: String,
@@ -107,7 +122,20 @@ pub mod call_tool_result {
         match format {
             ResultFormat::NewSuccess { status, value } => {
                 if status == "success" {
-                    Ok(Ok(value))
+                    // Handle empty content arrays by providing a default empty text
+                    let content = if value.content.is_empty() && value.structured_content.is_none()
+                    {
+                        vec![Content::text("(empty result)")]
+                    } else {
+                        value.content
+                    };
+
+                    let result = if value.is_error.unwrap_or(false) {
+                        CallToolResult::error(content)
+                    } else {
+                        CallToolResult::success(content)
+                    };
+                    Ok(Ok(result))
                 } else {
                     Err(serde::de::Error::custom(format!(
                         "Expected status 'success', got '{}'",
@@ -139,6 +167,85 @@ pub mod call_tool_result {
                     )))
                 }
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::mcp_utils::ToolResult;
+        use rmcp::model::RawContent;
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct TestToolResponse {
+            #[serde(deserialize_with = "deserialize")]
+            tool_result: ToolResult<CallToolResult>,
+        }
+
+        #[test]
+        fn test_deserialize_empty_content_array() {
+            // This is the exact format that caused the session resume failure
+            let json =
+                r#"{"tool_result":{"status":"success","value":{"content":[],"isError":false}}}"#;
+            let result: TestToolResponse = serde_json::from_str(json).unwrap();
+            let call_result = result.tool_result.unwrap();
+
+            // Should have converted empty content to "(empty result)"
+            assert_eq!(call_result.content.len(), 1);
+            if let RawContent::Text(text_content) = &call_result.content[0].raw {
+                assert_eq!(text_content.text, "(empty result)");
+            } else {
+                panic!("Expected text content");
+            }
+        }
+
+        #[test]
+        fn test_deserialize_new_format_with_content() {
+            let json = r#"{"tool_result":{"status":"success","value":{"content":[{"type":"text","text":"hello"}],"isError":false}}}"#;
+            let result: TestToolResponse = serde_json::from_str(json).unwrap();
+            let call_result = result.tool_result.unwrap();
+
+            assert_eq!(call_result.content.len(), 1);
+            if let RawContent::Text(text_content) = &call_result.content[0].raw {
+                assert_eq!(text_content.text, "hello");
+            } else {
+                panic!("Expected text content");
+            }
+        }
+
+        #[test]
+        fn test_deserialize_legacy_format() {
+            let json =
+                r#"{"tool_result":{"status":"success","value":[{"type":"text","text":"legacy"}]}}"#;
+            let result: TestToolResponse = serde_json::from_str(json).unwrap();
+            let call_result = result.tool_result.unwrap();
+
+            assert_eq!(call_result.content.len(), 1);
+            if let RawContent::Text(text_content) = &call_result.content[0].raw {
+                assert_eq!(text_content.text, "legacy");
+            } else {
+                panic!("Expected text content");
+            }
+        }
+
+        #[test]
+        fn test_deserialize_error_format() {
+            let json = r#"{"tool_result":{"status":"error","error":"something went wrong"}}"#;
+            let result: TestToolResponse = serde_json::from_str(json).unwrap();
+
+            assert!(result.tool_result.is_err());
+            let error = result.tool_result.unwrap_err();
+            assert_eq!(error.message.as_ref(), "something went wrong");
+        }
+
+        #[test]
+        fn test_deserialize_is_error_true() {
+            let json = r#"{"tool_result":{"status":"success","value":{"content":[{"type":"text","text":"error msg"}],"isError":true}}}"#;
+            let result: TestToolResponse = serde_json::from_str(json).unwrap();
+            let call_result = result.tool_result.unwrap();
+
+            assert!(call_result.is_error.unwrap_or(false));
         }
     }
 }

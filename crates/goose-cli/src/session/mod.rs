@@ -173,10 +173,16 @@ impl CliSession {
         retry_config: Option<RetryConfig>,
         output_format: String,
     ) -> Self {
-        let messages = SessionManager::get_session(&session_id, true)
-            .await
-            .map(|session| session.conversation.unwrap_or_default())
-            .unwrap();
+        let messages = match SessionManager::get_session(&session_id, true).await {
+            Ok(session) => session.conversation.unwrap_or_default(),
+            Err(e) => {
+                warn!(
+                    "Failed to load session history for '{}': {}. Starting fresh.",
+                    session_id, e
+                );
+                Conversation::default()
+            }
+        };
 
         CliSession {
             agent,
